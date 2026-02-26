@@ -50,6 +50,26 @@ def get_player_stats_df(understat: UnderstatClient, player_id: str,
         
     return stats_df
 
+def get_multiple_players_stats_df(understat: UnderstatClient, player_ids: List[str],
+                      stats: List[str]) -> pd.DataFrame:
+    """
+    Produces a dataframe with per-90 stats for every game played by each of the given
+    player_ids, for any club or season played. Indexes by player_id and date.
+    """
+    
+    stats_dfs = []
+    
+    for player_id in player_ids:
+        stats_df = get_player_stats_df(understat, player_id, stats)
+        # Add id to index
+        stats_df["player_id"] = player_id
+        stats_df = stats_df.set_index("player_id", append=True)
+        # Swap to index by player_id
+        stats_df = stats_df.swaplevel()
+        stats_dfs.append(stats_df)
+
+    return pd.concat(stats_dfs)
+
 class CustomFootballDataset(Dataset):
     """
     A torch dataset to wrap around a stats dataframe for training a time series
