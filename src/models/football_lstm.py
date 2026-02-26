@@ -47,3 +47,18 @@ class FootballLSTM(nn.Module):
             inpt = torch.cat((inpt[:,1:,:], out.unsqueeze(0)), dim=1) # (batch_size, window_size, n_features)
             
         return torch.stack(predictions).transpose(0,1) # (batch_size, k, n_features)
+    
+    def train_model(self, optimizer, loss_fn, train_dataloader, n_epochs: int):
+        """
+        Trains the model for n_epochs using the given optimizer and loss function,
+        on the given training dataloader. After each epoch, evaluates on the test
+        dataloader and prints the test loss.
+        """
+        for _ in range(n_epochs):
+            self.train()
+            for X_batch, y_batch in train_dataloader:
+                optimizer.zero_grad()
+                outputs = self(X_batch)
+                loss = loss_fn(outputs, y_batch)
+                loss.backward()
+                optimizer.step()
