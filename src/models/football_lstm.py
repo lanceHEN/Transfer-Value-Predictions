@@ -27,7 +27,8 @@ class FootballLSTM(nn.Module):
         output = self.fc(last_hidden_state) # (batch_size, n_features)
         return output
     
-    def predict_next_k(self, x: torch.Tensor, k: int):
+    @torch.no_grad()
+    def predict_next_k(self, x, k: int):
         """
         Produces a prediction for each of the next k games after the games
         represented in x.
@@ -39,7 +40,7 @@ class FootballLSTM(nn.Module):
         predictions = []
 
         inpt = x
-        for _ in range(10):
+        for _ in range(k):
             out = self(inpt) # (batch_size, n_features)
             predictions.append(out)
             # Keep all but 1st, and add next
