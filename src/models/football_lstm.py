@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 from sklearn.metrics import mean_absolute_error, root_mean_squared_error
+import pandas as pd
+from matplotlib import pyplot as plt
 
 class FootballLSTM(nn.Module):
     
@@ -99,3 +101,51 @@ class FootballLSTM(nn.Module):
         
         print(f"Test RMSE: {root_mean_squared_error(y_trues, y_preds)}")
         print(f"Test MAE: {mean_absolute_error(y_trues, y_preds)}")
+        
+    @torch.no_grad()
+    def eval_model_on_player(self, player_stats_df: pd.DataFrame, window_size: int=10):
+        """
+        Evaluates model performance on a particular player DataFrame. Uses the
+        first window_size games for training and the rest for testing, plotting
+        each actual vs. predicted stat over time.
+        
+        Also prints RMSE and MAE for the combined metrics, and for each metric
+        by itself.
+        """
+        x = torch.tensor(player_stats_df.values[:window_size], dtype=torch.float32)
+        
+        # Have to unsqueeze to add batch dimension
+        x = x.unsqueeze(0)
+        
+        y_trues = torch.tensor(player_stats_df.values[window_size:], dtype=torch.float32)
+        
+        y_preds = self.predict_next_k(x, len(player_stats_df) - window_size)
+        
+        # Get rid of batch dimension
+        y_preds = y_preds.squeeze(0)
+        
+        # Basic metrics
+        print(f"RMSE: {root_mean_squared_error(y_trues, y_preds)}")
+        print(f"MAE: {mean_absolute_error(y_trues, y_preds)}")
+        
+        fig, ax = plt.subplots(player_stats_df.shape[1], 1, layout="constrained", figsize=(20,10))
+        
+        # Get plots for every stat
+        for i, stat in enumerate(player_stats_df.columns):
+            
+            stat_actuals = y_trues[:,i]
+            stat_predictions = y_preds[:,i]
+            
+            # Per-stat metrics
+            print(f"{stat} RMSE: {root_mean_squared_error(stat_actuals, stat_predictions)}")
+            print(f"{stat} MAE: {mean_absolute_error(stat_actuals, stat_predictions)}")
+            
+            ax[i].plot(stat_actuals, color="blue", label=f"Actual {stat}")
+            ax[i].plot(stat_predictions, color="red", label=f"Predicted {stat}")
+            ax[i].legend()
+            ax[i].grid()
+            ax[i].set_xlabel("Game")
+            ax[i].set_ylabel(f"{stat}")
+        
+        plt.show()
+            
