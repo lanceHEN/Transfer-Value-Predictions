@@ -128,7 +128,7 @@ class FootballLSTM(nn.Module):
         print(f"RMSE: {root_mean_squared_error(y_trues, y_preds)}")
         print(f"MAE: {mean_absolute_error(y_trues, y_preds)}")
         
-        fig, ax = plt.subplots(player_stats_df.shape[1], 1, layout="constrained", figsize=(20,10))
+        fig, ax = plt.subplots(player_stats_df.shape[1], 1, layout="constrained", figsize=(20, 5 * len(player_stats_df.columns)))
         
         # Get plots for every stat
         for i, stat in enumerate(player_stats_df.columns):
