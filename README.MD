@@ -2,7 +2,7 @@
 
 A pipeline that predicts soccer player transfer market values based on historic performance and values.
 
-1. Runs a time series model (LSTM) on player performance to forecast future performance
+1. Runs a time series model (LSTM) on player performance to forecast future performance (i.e. use a player's last k games to predict how they do in their next game).
 
 2. Use predicted performance values as inputs for a regression model (Bayesian) to predict transfer value
 
@@ -30,7 +30,7 @@ A torch class that intializes our LSTM model and trains it with evaluation outpu
 A notebook that loads data, creates custom dataset and loads data for LSTM, splits into train and test (80/20 split) and then trains and evaluates the model.
 
 ### `player_stats.py`
-A data support file whose main point is to load the correct data from the Understat API and create datasets for our LSTM. Core function is `get_position_players_stats_df` that creates a dataframe given a desired position (Defender, Midfielder, or Forward) which is then `CustomFootballDataset` uses the dataframe created for given position to create tensors that are passed to LSTM.
+A data support file whose main point is to load the correct data from the Understat API and create datasets for our LSTM. Core function is `get_position_players_stats_df` that creates a dataframe given a desired position (Defender, Midfielder, or Forward).`CustomFootballDataset` is a torch dataset that uses the dataframe created for a given position to create input/output tensors that are passed to LSTM.
 
 ### `data_basics.ipynb`
 Provides a overview of the Transfer Market API and Understat API that we use to collect data.
