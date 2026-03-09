@@ -1,10 +1,10 @@
 # Project Overview
 
-A pipeline that predicts soccer player transfer market values based on historic performance and values.
+A pipeline that predicts soccer player transfer market values at different points in the future based on historic performance and values.
 
 1. Runs a time series model (LSTM) on player performance to forecast future performance (i.e. use a player's last k games to predict how they do in their next game).
 
-2. Use predicted performance values as inputs for a regression model (Bayesian) to predict transfer value
+2. Use predicted performance values as inputs for a regression model (Bayesian) to predict future transfer values at various points.
 
 Current Idea: To use different models for different positions.
 
