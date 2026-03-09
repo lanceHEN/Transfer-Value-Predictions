@@ -21,6 +21,9 @@ src/
     ├── player_stats.py
     ├── data_basics.ipynb
     └── __init__.py
+.gitignore
+README.md
+requirements.txt
 ```
 
 ### `football_lstm.py`
