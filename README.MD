@@ -10,6 +10,16 @@ Current Idea: To use different models for different positions.
 
 # Repository Overview
 
+## Installation
+1. Clone the repository:
+```bash
+git clone https://github.com/lanceHEN/Transfer-Value-Predictions.git
+```
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
 ## File Structure
 ```text
 src/
