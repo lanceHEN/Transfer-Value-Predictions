@@ -2,7 +2,7 @@
 
 A pipeline that predicts soccer player transfer market values at different points in the future based on historic performance and values.
 
-1. Runs a time series model (LSTM) on player performance to forecast future performance (i.e. use a player's last k games to predict how they do in their next game).
+1. Runs a time series model (LSTM) on player performance to forecast future performance (i.e. use a player's last k game blocks (aggregated windows of games) to predict how they do in their next game block).
 
 2. Use predicted performance values as inputs for a regression model (Bayesian) to predict future transfer values at various points.
 
@@ -37,7 +37,7 @@ requirements.txt
 ```
 
 ### `football_lstm.py`
-A torch class that intializes our LSTM model and trains it. Also contains a prediction function that allows us to predict the next k game performances for a given player.
+A torch class that intializes our LSTM model and trains it. Also contains a prediction function that allows us to predict the next k game block performances for a given player.
 
 ### `lstm.ipynb`
 A notebook that showcases the process of loading player data, making a train/test split,
