@@ -48,16 +48,20 @@ class FootballLSTM(nn.Module):
             out = self(inpt) # (batch_size, n_features)
             predictions.append(out)
             # Keep all but 1st, and add next
-            inpt = torch.cat((inpt[:,1:,:], out.unsqueeze(0)), dim=1) # (batch_size, blocks_per_input, n_features)
+            inpt = torch.cat((inpt[:,1:,:], out.unsqueeze(1)), dim=1) # (batch_size, blocks_per_input, n_features)
             
         return torch.stack(predictions).transpose(0,1) # (batch_size, k, n_features)
     
     def train_model(self, optimizer, loss_fn, train_dataloader, test_dataloader, n_epochs: int=10, test_every: int=1):
         """
         Trains the model for n_epochs using the given optimizer and loss function,
-        on the given training dataloader. After each epoch, evaluates on the test
-        dataloader and prints the test loss.
+        on the given training dataloader. After each test_every epochs, evaluates on the test
+        dataloader as well. Returns the list of train and test losses, averaged
+        per-batch.
         """
+        train_losses = []
+        test_losses = []
+        
         for epoch in range(n_epochs):
             self.train()
             train_loss = 0
@@ -69,7 +73,7 @@ class FootballLSTM(nn.Module):
                 loss.backward()
                 optimizer.step()
                 
-            print(f"Train total loss: {train_loss}")
+            train_losses.append(train_loss / len(train_dataloader))
                 
             if epoch % test_every == 0:
                 test_loss = 0
@@ -80,7 +84,9 @@ class FootballLSTM(nn.Module):
                         loss = loss_fn(outputs, y_batch)
                         test_loss += loss.item()
             
-            print(f"Test total loss: {test_loss}")
+            test_losses.append(test_loss / len(test_dataloader))
+            
+        return train_losses, test_losses
     
     @torch.no_grad()
     def eval_model(self, test_dataloader):

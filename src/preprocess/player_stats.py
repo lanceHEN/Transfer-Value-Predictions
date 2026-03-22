@@ -10,10 +10,12 @@ This module contains basic helper functions or classes to load in or store
 player stats using understat.
 """
 
-def get_player_ids(understat: UnderstatClient, positions: Set[str], league: str = "EPL", season: str = "2025") -> List[str]:
+def get_player_ids(understat: UnderstatClient, positions: List[str], league: str = "EPL", season: str = "2025") -> List[str]:
     """
-    Gets a list of all player ids for the given league, season, and positions.
+    Gets a list of all player ids for the given positions in the given league and season.
     """
+    positions = set(positions)
+    
     players = understat.league(league=league).get_player_data(season=season)
     
     # Filter by position
@@ -73,17 +75,26 @@ def get_player_stats_df(understat: UnderstatClient, player_id: str, games_per_bl
         
     return agg_df
 
-def get_position_players_stats_df(understat: UnderstatClient, position: List[str], games_per_block: int,
-                      stats: List[str]) -> pd.DataFrame:
+def get_position_players_stats_df(understat: UnderstatClient, position: List[str],
+                                  games_per_block: int,
+                                  stats: List[str],
+                                  leagues: List[str] = ["EPL"],
+                                  seasons: List[str] = [2025]) -> pd.DataFrame:
     """
-    Produces a dataframe of all players with a given position
+    Produces a dataframe of all players for the given position, leagues, and seasons
     with aggregate per-90 stats, for every block of games_per_block games played by each of the given
     player_ids, for any club or season played. Indexes by player_id and date.
     """
+    # First get all player ids for positions, leagues and seasons.
+    
+    player_ids = set() # Store as set to ensure no duplicates
+    
+    for league in leagues:
+        for season in seasons:
+            ls_ids = get_player_ids(understat, position, league, season)
+            player_ids = player_ids | set(ls_ids)
     
     stats_dfs = []
-    
-    player_ids = get_player_ids(understat, set(position))
     for player_id in player_ids:
         stats_df = get_player_stats_df(understat, player_id, games_per_block, stats)
         # Add id to index
