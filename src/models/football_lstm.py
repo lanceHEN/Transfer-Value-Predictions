@@ -108,9 +108,6 @@ class FootballLSTM(nn.Module):
 
         rmse = root_mean_squared_error(y_trues, y_preds)
         mae = mean_absolute_error(y_trues, y_preds)
-        
-        print(f"Test RMSE: {rmse}")
-        print(f"Test MAE: {mae}")
 
         return rmse, mae
         
