@@ -147,9 +147,13 @@ class FootballLSTM(nn.Module):
         # Get rid of batch dimension
         y_preds = y_preds.squeeze(0)
         
+        # Convert to numpy to be able to use sklearn
+        y_trues_np = y_trues.detach().cpu().numpy()
+        y_preds_np = y_preds.detach().cpu().numpy()
+
         # Basic metrics
-        print(f"RMSE: {root_mean_squared_error(y_trues, y_preds)}")
-        print(f"MAE: {mean_absolute_error(y_trues, y_preds)}")
+        print(f"RMSE: {root_mean_squared_error(y_trues_np, y_preds_np)}")
+        print(f"MAE: {mean_absolute_error(y_trues_np, y_preds_np)}")
         
         fig, ax = plt.subplots(player_stats_df.shape[1], 1, layout="constrained", figsize=(20, 5 * len(player_stats_df.columns)))
         
