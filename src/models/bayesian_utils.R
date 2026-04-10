@@ -6,6 +6,161 @@ library(MCMCpack) # For inverse gamma sampling
 library(data.table) # For single feature one-hot encoding
 library(ggplot2) # For plots
 
+run_position_model <- function(position, prior_w, prior_Sigma, prior_alpha, prior_beta, no_samples=1000) {
+    # This abstracts as much duplicate code as possible between the midfielder vs forward files
+    
+    league_levels <- c("Bundesliga", "Serie_A", "Ligue_1", "La_Liga", "EPL")
+    
+    # Data loading and prep
+    res <- load_position_real_data(position)
+    train_data <- one_hot_encode_league(res$train_data, league_levels)
+    test_data  <- one_hot_encode_league(res$test_data,  league_levels)
+    
+    # Winsorize
+    winsor_params <- read.csv(sprintf('src/data/%s_winsorize_params.csv', position))
+    res <- winsorize(train_data, test_data, winsor_params)
+    train_data <- res$train_data
+    test_data <- res$test_data
+    
+    # Add squared age col
+    train_data$age_log <- log(train_data$age)
+    test_data$age_log <- log(test_data$age)
+    
+    # Get train/test matrices
+    
+    # Use these rather than indexing
+    continuous_cols <- c('xG_per_90',
+                         'xA_per_90',
+                         'xGChain_per_90',
+                         'age_log',
+                         'year')
+    
+    drop_cols <- c("player_id", "player_name","age", "date", "value")
+    
+    # Store min/max from training
+    col_mins <- apply(train_data[, continuous_cols], 2, min)
+    col_maxs <- apply(train_data[, continuous_cols], 2, max)
+    
+    res <- get_X_y(train_data, continuous_cols, drop_cols, col_mins, col_maxs)
+    X_train <- res$X
+    y_train <- res$y
+    
+    res <- get_X_y(test_data, continuous_cols, drop_cols, col_mins, col_maxs)
+    X_test <- res$X
+    y_test <- res$y
+    
+    print(head(X_train))
+    
+    # Run Gibbs
+    gibbs_res <- gibbs(X_train, y_train, prior_w, prior_Sigma, prior_alpha, prior_beta, no_samples=no_samples, burn=.18)
+    
+    # Return everything needed
+    list(X_train=X_train,y_train=y_train,X_test=X_test,y_test=y_test,train_data=train_data,test_data=test_data,
+         gibbs_samples_w=gibbs_res$w, gibbs_samples_sigmay=gibbs_res$sigmay, col_mins=col_mins, col_maxs=col_maxs)
+}
+
+evaluate_position_model <- function(position, res, player_name, real_ylim, lstm_ylim) {
+    # This deduplicates the evaluation code between the midfielder vs forward files
+    X_train <- res$X_train
+    y_train <- res$y_train
+    X_test <- res$X_test
+    y_test <- res$y_test
+    train_data <- res$train_data
+    test_data <- res$test_data
+    gibbs_samples_w <- res$gibbs_samples_w
+    gibbs_samples_sigmay <- res$gibbs_samples_sigmay
+    
+    continuous_cols <- c('xG_per_90', 'xA_per_90', 'xGChain_per_90', 'age_log', 'year')
+    drop_cols <- c("player_id", "player_name", "age", "date", "value")
+    league_levels <- c("Bundesliga", "Serie_A", "Ligue_1", "La_Liga", "EPL")
+    
+    # check convergence and mixing of weights
+    convergence_acf_plots(gibbs_samples_w)
+    
+    # mean weight
+    cat("OLS:", solve(t(X_train)%*%X_train)%*%t(X_train)%*%y_train, "\n")
+    cat("Posterior mean for w:", colMeans(gibbs_samples_w), "\n")
+    
+    plot(gibbs_samples_sigmay, type = "l", main="Convergence of sigmay samples")
+    acf(gibbs_samples_sigmay, main="ACF of sigmay samples")
+    
+    ###################### Real stats
+    no_samples <- nrow(gibbs_samples_w)
+    
+    y_test_pred <- get_preds(X_test, gibbs_samples_w, gibbs_samples_sigmay)
+    cat("Real Stats\n")
+    cat("RMSE:", rmse(exp(y_test), exp(y_test_pred)), "\n")
+    cat("R^2:", R2_Score(y_pred = y_test_pred, y_true = y_test), "\n")
+    
+    ## Plot predictions vs actuals
+    print(plot_preds_vs_actuals(y_test_pred, y_test, ylim = real_ylim,
+                                title=sprintf("%s Predictions vs Actuals (Real data inputs)", position))) # Have to print else wont show
+    cat("Predictions above 100mil:\n")
+    print(test_data[exp(y_test_pred) > 100000000, ]) # Preds above 100mil
+    
+    # Look at preds for a player
+    latest_idx   <- tail(which(test_data$player_name == player_name), 1) # Most recent
+    player_preds <- player_posterior(X_test[latest_idx, ], gibbs_samples_w, gibbs_samples_sigmay)
+    
+    # Posterior value dist
+    print(plot_player_posterior(X_test[latest_idx, ], player_name,
+                          exp(y_test[latest_idx, ]),
+                          gibbs_samples_w, gibbs_samples_sigmay, breaks = 20,
+                          title=sprintf("Posterior Predictive Distribution (Real data input): %s", player_name)))
+    
+    cat(sprintf("90%% CI for %s:",player_name), exp(quantile(player_preds, c(0.1, 0.9))), "\n") # 90% ci
+    
+    # Change in val over time with credible int ribbon
+    print(plot_player_value_over_time(player_name, X_test, y_test, test_data,
+                                gibbs_samples_w, gibbs_samples_sigmay, ci = 0.9,
+                                title=sprintf("%s Predictions vs Actuals over Time (Real data inputs)", player_name)))
+    
+    
+    ##################### From LSTM
+    full_test_data <- read.csv(sprintf("src/data/%s_predictions_real_values.csv",
+                                       position))
+    full_test_data <- one_hot_encode_league(full_test_data, league_levels)
+    
+    full_test_data$age_log <- log(full_test_data$age)
+    
+    col_mins <- res$col_mins
+    col_maxs <- res$col_maxs
+    
+    ft_res <- get_X_y(full_test_data, continuous_cols, drop_cols, col_mins, col_maxs)
+    X_full_test <- ft_res$X
+    y_full_test <- ft_res$y
+    
+    y_full_test_pred <- get_preds(X_full_test, gibbs_samples_w, gibbs_samples_sigmay)
+    cat("LSTM Predictions\n")
+    cat("RMSE:", rmse(exp(y_full_test), exp(y_full_test_pred)), "\n")
+    cat("R^2:", R2_Score(y_pred = y_full_test_pred, y_true = y_full_test), "\n")
+    
+    ## Plot predictions vs actuals
+    print(plot_preds_vs_actuals(y_full_test_pred, y_full_test, ylim = lstm_ylim,
+                                title=sprintf("%s Predictions vs Actuals (LSTM inputs)", position)))
+    cat("Predictions above 100mil:\n")
+    print(full_test_data[exp(y_full_test_pred) > 100000000, ]) # Preds above 100mil
+    
+    # Look at preds for a player
+    latest_idx <- tail(which(full_test_data$player_name == player_name), 1)
+    player_preds <- player_posterior(X_full_test[latest_idx, ], gibbs_samples_w, gibbs_samples_sigmay)
+    
+    # Posterior value dist
+    print(plot_player_posterior(X_full_test[latest_idx, ], player_name,
+                          exp(y_full_test[latest_idx, ]),
+                          gibbs_samples_w, gibbs_samples_sigmay, breaks = 20,
+                          title=sprintf("Posterior Predictive Distribution (LSTM input): %s", player_name)))
+    
+    
+    cat(sprintf("90%% CI for %s:",player_name), exp(quantile(player_preds, c(0.1, 0.9))), "\n")
+    
+    # Change in val over time with credible int ribbon
+    print(plot_player_value_over_time(player_name, X_full_test, y_full_test, full_test_data,
+                                gibbs_samples_w, gibbs_samples_sigmay, ci = 0.9,
+                                title=sprintf("%s Predictions vs Actuals over Time (LSTM inputs)", player_name)))
+    
+}
+
 load_position_real_data <- function(position) {
     # This produces the train/test dataframes for real data at the given position
     train_data <- read.csv(sprintf("src/data/%s_stats_values_train.csv", position))
@@ -100,10 +255,10 @@ gibbs <- function(X_train, y_train, prior_w, prior_Sigma, prior_alpha, prior_bet
     list(w= gibbs_samples_w[(m+1):total_samples,], sigmay = gibbs_samples_sigmay[(m+1):total_samples,])
 }
 
-get_preds <- function(X) {
+get_preds <- function(X, gibbs_samples_w, gibbs_samples_sigmay) {
     # Get test predictions
-    test_preds <- matrix(0, nrow = nrow(X), ncol = no_samples)
-    for(i in 1:no_samples) {
+    test_preds <- matrix(0, nrow = nrow(X), ncol = nrow(gibbs_samples_w))
+    for(i in 1:nrow(gibbs_samples_w)) {
         test_preds[,i] <- rmvn(n=1, mu=X%*%gibbs_samples_w[i,], sigma=diag(nrow(X))*gibbs_samples_sigmay[i])
     }
     rowMeans(test_preds)
@@ -135,20 +290,29 @@ convergence_acf_plots <- function(samples) {
     }
 }
 
-# Plot predictions vs actuals
-plot_preds_vs_actuals <- function(predictions,actuals,ylim) {
+# Plot predictions vs actuals - log scale each axis for readability
+plot_preds_vs_actuals <- function(predictions,actuals,ylim,title) {
     # To euros
     pred_euros <- exp(predictions)
     actual_euros <- exp(actuals)
     
-    plot(actual_euros, pred_euros, xlab  = "Actual Value (euros)", ylab  = "Predicted Value (euros)", col="red",ylim=ylim)
+    ## GGplot much nicer
+    df <- data.frame(actual = actual_euros, pred = pred_euros)
     
-    # Perfect prediction line
-    abline(a = 0, b = 1, col = "blue", lwd = 2)
+    ggplot(df, aes(x = actual, y = pred)) +
+        geom_point(alpha = 0.3, size = 0.8, color = "blue") +
+        geom_abline(aes(slope = 1, intercept = 0, linetype = "Perfect Prediction"),
+                    color = "red", linewidth = 0.8) +
+        scale_linetype_manual(name = "", values = c("Perfect Prediction" = "solid")) +
+        scale_x_log10(labels = function(x) formatC(x, format = "f", digits = 0, big.mark = ",")) +
+        scale_y_log10(labels = function(x) formatC(x, format = "f", digits = 0, big.mark = ",")) +
+        labs(title = title,
+             x = "Actual Value (euros)",
+             y = "Predicted Value (euros)")
 }
 
 plot_player_posterior <- function(player_row, player_name, actual_value,
-                                  gibbs_samples_w, gibbs_samples_sigmay, breaks) {
+                                  gibbs_samples_w, gibbs_samples_sigmay, breaks,title) {
     # Get posterior samples
     preds <- player_posterior(player_row, gibbs_samples_w, gibbs_samples_sigmay)
     pred_euros <- exp(preds)
@@ -160,20 +324,21 @@ plot_player_posterior <- function(player_row, player_name, actual_value,
         geom_histogram(bins = breaks, color="black") +
         geom_vline(aes(xintercept = actual_value,
                    colour = "Actual Value")) +
-        scale_colour_manual(name = "Legend", values = c("Actual Value" = "red")) +
+        scale_color_manual(name = "", values = c("Actual Value" = "red")) +
         scale_x_continuous(labels = function(x) formatC(x, format = "f", digits = 0, big.mark = ",")) +
-        labs(title = sprintf("Posterior Predictive Distribution: %s", player_name),
+        labs(title = title,
              x = "Predicted Market Value (euros)")
 }
 
-plot_player_value_over_time <- function(player_name, X, data,
+plot_player_value_over_time <- function(player_name, X, y, data,
                                         gibbs_samples_w, gibbs_samples_sigmay,
-                                        ci = 0.9) {
+                                        ci = 0.9, title) {
     # Plots a player's predicted value over time with the credible interval bounds.
     
     # Get indices for this player
     player_mask <- data$player_name == player_name
     player_X <- X[player_mask, ]
+    player_y <- exp(y[player_mask, ])
     player_dates <- as.Date(data$date[player_mask])
     
     upper_b <- ci + (1 - ci) / 2
@@ -197,15 +362,20 @@ plot_player_value_over_time <- function(player_name, X, data,
     df <- data.frame(
         date = player_dates,
         mean = means,
+        actual = player_y,
         lower = lowers,
-        upper = uppers
+        upper = uppers,
+        ci_label = sprintf("%d%% Credible Interval", 100 * ci)
     )
     
     ggplot(df, aes(x = date)) +
-        geom_ribbon(aes(ymin = lower, ymax = upper), 
-                    fill="lightblue") +
-        geom_line(aes(y = mean), color = "blue", linewidth = 1) +
+        geom_ribbon(aes(ymin = lower, ymax = upper, fill = ci_label)) +
+        geom_line(aes(y = mean, color="Predicted Mean"), linewidth = 1) +
+        geom_line(aes(y = actual, color = "Actual Value"), linewidth = 1) +
+        scale_fill_manual(name = "", values = setNames("lightblue", df$ci_label[1])) +
+        scale_color_manual(name = "", values = c("Predicted Mean" = "blue", "Actual Value" = "red")) +
         scale_y_continuous(labels = function(x) formatC(x, format = "f", digits = 0, big.mark = ",")) +
-        labs(x= "Date",
-             y = "Predicted Market Value (euros)")
+        labs(title=title,
+            x= "Date",
+             y = "Market Value (euros)")
 }
