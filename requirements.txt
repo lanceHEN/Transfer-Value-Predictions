@@ -62,3 +62,6 @@ urllib3==1.26.5
 wcwidth==0.6.0
 ipywidgets
 pyarrow
+streamlit
+plotly
+pathlib
