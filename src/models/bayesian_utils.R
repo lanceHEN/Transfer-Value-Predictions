@@ -73,7 +73,7 @@ run_position_model <- function(position, prior_w, prior_Sigma, prior_alpha, prio
          gibbs_samples_w=gibbs_res$w, gibbs_samples_sigmay=gibbs_res$sigmay, col_mins=col_mins, col_maxs=col_maxs)
 }
 
-evaluate_position_model <- function(position, res, player_name, real_ylim, lstm_ylim) {
+evaluate_position_model <- function(position, res, player_name) {
     # This deduplicates the evaluation code between the midfielder vs forward files
     X_train <- res$X_train
     y_train <- res$y_train
@@ -107,7 +107,7 @@ evaluate_position_model <- function(position, res, player_name, real_ylim, lstm_
     cat("R^2:", R2_Score(y_pred = y_test_pred, y_true = y_test), "\n")
     
     ## Plot predictions vs actuals
-    print(plot_preds_vs_actuals(y_test_pred, y_test, ylim = real_ylim,
+    print(plot_preds_vs_actuals(y_test_pred, y_test,
                                 title=sprintf("%s Predictions vs Actuals (Real data inputs)", position))) # Have to print else wont show
     cat("Predictions above 100mil:\n")
     print(test_data[exp(y_test_pred) > 100000000, ]) # Preds above 100mil
@@ -148,7 +148,7 @@ evaluate_position_model <- function(position, res, player_name, real_ylim, lstm_
     cat("R^2:", R2_Score(y_pred = y_full_test_pred, y_true = y_full_test), "\n")
     
     ## Plot predictions vs actuals
-    print(plot_preds_vs_actuals(y_full_test_pred, y_full_test, ylim = lstm_ylim,
+    print(plot_preds_vs_actuals(y_full_test_pred, y_full_test,
                                 title=sprintf("%s Predictions vs Actuals (LSTM inputs)", position)))
     cat("Predictions above 100mil:\n")
     print(full_test_data[exp(y_full_test_pred) > 100000000, ]) # Preds above 100mil
@@ -196,12 +196,12 @@ one_hot_encode_league <- function(data, league_levels) {
 
 winsorize <- function(train_data, test_data, winsor_params) {
     # This winsorizes the given train and test dfs
-    caps <- setNames(winsor_params$cap, winsor_params$stat)
-    stat_cols <- names(caps)
     
-    for (col in stat_cols) {
-        train_data[, col] <- pmin(train_data[, col], caps[col])
-        test_data[, col]  <- pmin(test_data[, col],  caps[col])
+    for (i in seq_len(nrow(winsor_params))) {
+        col <- winsor_params$stat[i]
+        cap <- winsor_params$cap[i]
+        train_data[, col] <- pmin(train_data[, col], cap)
+        test_data[, col]  <- pmin(test_data[, col],  cap)
     }
     
     list(train_data=train_data, test_data=test_data)
@@ -228,7 +228,7 @@ get_X_y <- function(data, continuous_cols, drop_cols, col_mins, col_maxs) {
     list(X=X, y=y)
 }
 
-gibbs <- function(X_train, y_train, prior_w, prior_Sigma, prior_alpha, prior_beta, no_samples = 1000, burn=.18) {
+gibbs <- function(X_train, y_train, prior_w, prior_Sigma, prior_alpha, prior_beta, no_samples = 5000, burn=.18) {
     # Runs Gibbs sampling on the given X/y pair, and with the given prior choices
     # for the weights and uncertainties, as well as for the covariance of y.
     # Returns the sampled ws and Sigmas.
@@ -303,7 +303,7 @@ convergence_acf_plots <- function(samples) {
 }
 
 # Plot predictions vs actuals - log scale each axis for readability
-plot_preds_vs_actuals <- function(predictions,actuals,ylim,title) {
+plot_preds_vs_actuals <- function(predictions,actuals,title) {
     # To euros
     pred_euros <- exp(predictions)
     actual_euros <- exp(actuals)
@@ -312,9 +312,9 @@ plot_preds_vs_actuals <- function(predictions,actuals,ylim,title) {
     df <- data.frame(actual = actual_euros, pred = pred_euros)
     
     ggplot(df, aes(x = actual, y = pred)) +
-        geom_point(alpha = 0.3, size = 0.8, color = "blue") +
+        geom_point(color = "blue") +
         geom_abline(aes(slope = 1, intercept = 0, linetype = "Perfect Prediction"),
-                    color = "red", linewidth = 0.8) +
+                    color = "red") +
         scale_linetype_manual(name = "", values = c("Perfect Prediction" = "solid")) +
         scale_x_log10(labels = function(x) formatC(x, format = "f", digits = 0, big.mark = ",")) +
         scale_y_log10(labels = function(x) formatC(x, format = "f", digits = 0, big.mark = ",")) +
@@ -340,8 +340,9 @@ plot_player_posterior <- function(player_row, player_name, actual_value,
                    colour = "Actual Value")) +
         geom_vline(aes(xintercept = mean_val,
                        colour = "Posterior Mean")) +
-        scale_color_manual(name = "Legend", values = c("Actual Value" = "red", "Posterior Mean" = "blue")) +
-        scale_x_continuous(labels = function(x) formatC(x, format = "f", digits = 0, big.mark = ",")) +
+        scale_color_manual(name = "", values = c("Actual Value" = "red", "Posterior Mean" = "blue")) +
+        scale_x_continuous(limits = c(0, 200000000),
+                           labels = function(x) formatC(x, format = "f", digits = 0, big.mark = ",")) +
         labs(title = title,
              x = "Predicted Market Value (euros)",
              y = "Count")
