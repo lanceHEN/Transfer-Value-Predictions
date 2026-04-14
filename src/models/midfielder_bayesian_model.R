@@ -30,4 +30,4 @@ no_samples <- 5000
 # Preprocess + run Gibbs
 res <- run_position_model(position, prior_w, prior_Sigma, prior_alpha, prior_beta, no_samples=no_samples, oversample_elite=T)
 # Evaluate
-evaluate_position_model(position, res, player_name="Bukayo Saka", real_ylim = c(0, 2e8), lstm_ylim=c(0,5e7))
+evaluate_position_model(position, res, player_name="Bukayo Saka")

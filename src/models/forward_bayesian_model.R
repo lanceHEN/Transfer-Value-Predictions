@@ -8,8 +8,8 @@ set.seed(42) # for reproducibility
 position <- 'F'
 
 # Define priors
-prior_w <- matrix(c(1.5, # xg - larger since forwards should score more goals
-                    0.8, # xa - larger since forwards should get more assists
+prior_w <- matrix(c(1.5, # xg - larger since goals are paramount for forwards
+                    0.8, # xa - larger since goals are also key for forwards
                     .4, # xgchain - not as great as for midfielders
                     -3, # age - strong negative
                     0.3, # year - small positive for inflation
@@ -30,4 +30,4 @@ no_samples <- 5000
 # Preprocess + run Gibbs
 res <- run_position_model(position, prior_w, prior_Sigma, prior_alpha, prior_beta, no_samples=no_samples, oversample_elite=T)
 # Evaluate
-evaluate_position_model(position, res, player_name="Gabriel Jesus", real_ylim = c(0, 2e8), lstm_ylim=c(0,5e7))
+evaluate_position_model(position, res, player_name="Gabriel Jesus")

@@ -4,6 +4,7 @@ from sklearn.metrics import mean_absolute_error, root_mean_squared_error
 import pandas as pd
 from matplotlib import pyplot as plt
 import numpy as np
+from collections import defaultdict
 
 # have GPU available to speed up
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -102,41 +103,58 @@ class FootballLSTM(nn.Module):
     @torch.no_grad()
     def get_test_preds(self, test_dataloader):
         """
-        Produces torch tensors for all true and predicted outputs, each of shape
-        (test_size, n_features). Also returns the look-ahead values for each
-        output.
+        For the given test dataframe, produced torch tensors for all true and
+        predicted outputs, each of shape (test_size, n_features). Also returns the number
+        of steps ahead for each output
         """
         self.eval()
-        y_preds = [] # (n_batches, batch_size, n_features)
-        y_trues = [] # (n_batches, batch_size, n_features)
-        lookaheads = [] 
         
-        for X_batch, y_batch, lookahead_batch in test_dataloader:
-            # to be able to run on GPU
+        # make a dict from player to x and y - then can do predict next k
+        player_data = defaultdict(lambda: {"X": [], "y": []})
+    
+        for X_batch, y_batch, player_ids in test_dataloader:
             X_batch = X_batch.to(device)
             y_batch = y_batch.to(device)
-            outputs = self(X_batch) # (batch_size, n_features)
+            for i, id in enumerate(player_ids):
+                # Make sure to .item() on id otherwise you get hashing issues
+                player_data[id.item()]["X"].append(X_batch[i])
+                player_data[id.item()]["y"].append(y_batch[i])
+                
+        # For each player do predict next k and add to running outputs
+        #print(player_data)
+        
+        y_preds = [] # (n_batches, batch_size, n_features)
+        y_trues = [] # (n_batches, batch_size, n_features)
+        steps = [] 
+        
+        for id, data_dict in player_data.items():
+            # Start from first however many blocks
+            start = data_dict["X"][0].unsqueeze(0)
+            n_steps = len(data_dict["y"])
             
-            y_preds.append(outputs)
-            y_trues.append(y_batch)
-            lookaheads.append(lookahead_batch)
+            preds = self.predict_next_k(start, n_steps).squeeze(0)
+            trues = torch.stack(data_dict["y"])
+            
+            y_preds.append(preds)
+            y_trues.append(trues)
+            steps.append(torch.arange(1, n_steps + 1)) # 1 up to n steps
             
         y_preds = torch.cat(y_preds).detach().cpu().numpy() # (test_size, n_features)
         y_trues = torch.cat(y_trues).detach().cpu().numpy() # (test_size, n_features)
-        lookaheads = torch.cat(lookaheads).detach().cpu().numpy()
+        steps = torch.cat(steps).detach().cpu().numpy()
         
-        return y_trues, y_preds, lookaheads
+        return y_trues, y_preds, steps
     
     @torch.no_grad()
     def look_ahead_errors(self, test_dataloader):
         """
         Produces the RMSE per number of blocks into the future.
         """
-        y_trues, y_preds, lookaheads = self.get_test_preds(test_dataloader)
+        y_trues, y_preds, steps = self.get_test_preds(test_dataloader)
         
         results = {}
-        for step in np.unique(lookaheads):
-            mask = lookaheads == step
+        for step in np.unique(steps):
+            mask = steps == step
             rmse = mean_absolute_error(y_trues[mask], y_preds[mask])
             results[step] = rmse
 
@@ -145,7 +163,8 @@ class FootballLSTM(nn.Module):
     @torch.no_grad()
     def eval_model(self, test_dataloader):
         """
-        Evaluates model performance on the given test dataloader, returning
+        Evaluates model performance on the given test dataloader by making
+        autoregressive (NOT ONE STEP AHEAD) forecasts, returning
         a dict containing the overall RMSE and MAE at key 'Overall', as
         well as the individual columns, 0-indexed.
         """
