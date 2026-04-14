@@ -430,7 +430,7 @@ A Long Short-Term Memory (LSTM) neural network takes a sequence of 10 consecutiv
 as input, each a 3-vector of per-90 xG, xA, and xGChain, and predicts the next block.
 Chaining predictions autoregressively allows multi-step forecasting. Trained separately for
 forwards and midfielders via an 80/20 player-based split, with hyperparameters found by grid
-search. Final config: learning rate 0.001, 1 hidden layer, width 64, 20 epochs. Test RMSE
+search. Final config: learning rate 0.001, 1 hidden layer, width 32, 20 epochs. Test RMSE
 was 0.199 for forwards and 0.115 for midfielders. The higher forward error reflects
 heterogeneity in the position: strikers and wingers have very different play styles, and
 the dataset does not provide granularity to separate them.
@@ -444,9 +444,12 @@ capturing short-term variation.
 
 Maps performance features (real or LSTM-generated) plus log(age), year, and one-hot league
 encodings to log(market value) via Gibbs sampling with a Gaussian likelihood and informative
-priors. After 18% burn-in, 5,000 posterior samples are retained. Every valuation is a full
-posterior predictive distribution. The model achieves a posterior R2 of 0.49 for midfielders
-and 0.40 for forwards using real performance inputs.
+priors. To improve performance on underrepresented elite players, we oversample them during
+training to increase representation. Observations with a market value exceeding 50M euros
+were resampled with replacement to 3 times their original count. After 18% burn-in, 5,000
+posterior samples are retained. Every valuation is a full posterior predictive distribution.
+The model achieves a posterior R2 of 0.49 for midfielders and 0.40 for forwards using real
+performance inputs, with RMSEs of 16.1M and 18.1M euros.
         """)
         st.markdown("---")
         st.markdown('<div class="slabel">Prior Weights and Posterior Results</div>', unsafe_allow_html=True)
@@ -454,16 +457,16 @@ and 0.40 for forwards using real performance inputs.
 Priors encode domain knowledge: better performance should increase value, younger players command
 a premium, and the Premier League carries the highest fees globally. Posteriors meaningfully
 differ by position as anticipated. For midfielders, xGChain dominates with a posterior mean of
-2.198, reflecting that general build-up participation is the most diagnostic statistic for that
-position, while xG and xA carry much smaller weights (0.036 and 0.158). For forwards the picture
-is more balanced: xG and xA reach 0.593 and 0.814, though xGChain still leads at 0.944, likely
+2.518, reflecting that general build-up participation is the most diagnostic statistic for that
+position, while xG and xA carry much smaller weights (0.088 and 0.215). For forwards the picture
+is more balanced: xG and xA reach 0.734 and 0.951, though xGChain still leads at 1.124, likely
 driven by the creative contribution of wingers in the forward group.
 
-The age coefficient is consistently negative at -3.747 for midfielders and -3.293 for forwards,
-confirming that younger players command a substantial premium. Year is positive at 0.374 and
-0.521, capturing transfer market inflation. The Premier League premium is the largest of all
-league coefficients at 1.389 and 1.401, considerably higher than our prior and far ahead of
-La Liga (0.595 / 0.647) and Serie A (0.515 / 0.584). Ligue 1 (0.308 / 0.210) is actually
+The age coefficient is consistently negative at -3.902 for midfielders and -3.443 for forwards,
+confirming that younger players command a substantial premium. Year is positive at 0.389 and
+0.524, capturing transfer market inflation. The Premier League premium is the largest of all
+league coefficients at 1.428 and 1.499, considerably higher than our prior and far ahead of
+La Liga (0.663 / 0.758) and Serie A (0.508 / 0.595). Ligue 1 (0.389 / 0.524) is actually
 higher than Bundesliga, which was the reference category, contrary to our prior of -0.2.
         """)
         st.markdown("---")
@@ -472,11 +475,11 @@ higher than Bundesliga, which was the reference category, contrary to our prior 
             "Feature":        ["xG / 90","xA / 90","xGChain / 90","Age (log)","Year",
                                "Premier League","La Liga","Ligue 1","Serie A","Intercept"],
             "FW Prior":       ["+0.5","+0.5","+1.0","-3.0","+0.3","+1.0","+0.7","-0.2","0.0","~13.8"],
-            "FW Posterior":   ["+0.593","+0.814","+0.944","-3.293","+0.521",
-                               "+1.401","+0.647","+0.210","+0.584","~14.9"],
+            "FW Posterior": ["+0.593", "+0.814", "+0.944", "-3.443", "+0.524",
+                 "+1.499", "+0.758", "+0.524", "+0.595", "~14.9"],
             "MF Prior":       ["+0.2","+0.2","+2.0","-3.0","+0.3","+1.0","+0.7","-0.2","0.0","~13.8"],
-            "MF Posterior":   ["+0.036","+0.158","+2.198","-3.747","+0.374",
-                               "+1.389","+0.595","+0.308","+0.515","~14.9"],
+            "MF Posterior": ["+0.036", "+0.158", "+2.198", "-3.902", "+0.389",
+                            "+1.428", "+0.663", "+0.389", "+0.508", "~14.9"],
         }), width='content', hide_index=True, height=388)
 
 
