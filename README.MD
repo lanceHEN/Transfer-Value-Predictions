@@ -32,7 +32,7 @@ src/
 |--- models/
     |--- tuning_graphs/
         |--- All graphs from hyperparam tuning
-│   |---  __init__.py
+    |---  __init__.py
     |--- football_lstm.py                
     |--- midfielder_bayesian_model.R                    
     |--- forward_bayesian_model.R
@@ -40,6 +40,7 @@ src/
     |--- lstm.ipynb                      
     |--- utils.py
 |--- preprocess/
+    |---  __init__.py
     |--- player_stats.py                           
     |--- pull_understat_data.ipynb
     |--- data_basics.ipynb                       
@@ -51,7 +52,7 @@ requirements.txt
 ```
 
 ## `data`
-Contains all csv used to train and test model pulled from understat api to avoid pulling everytime. 
+Contains all csvs used to train and test the models; pulled from understat api to avoid pulling every time. 
 
 ## `models`
 
@@ -63,10 +64,10 @@ A torch class that intializes our LSTM model and trains it. Also contains a pred
 
 ### `lstm.ipynb`
 A notebook that showcases the process of loading player data, making a train/test split,
-creating torch datasets and dataloaders, and training and evaluating the model. Includes hyperparameter tuning that saves graph of best performance and eventually determines the parameters of the model that is being trained
+creating torch datasets and dataloaders, and training and evaluating the model. Includes hyperparameter tuning that saves graph of best performance and eventually determines the parameters of the model that is being trained.
 
 ### `bayesian_utils.R`
-A utils file containing abstractions for running and evaluating bayesian model on given positions as well as a bunch of helper functions such as loading data, winsorizing, one hot encoding, etc. Also contains steps for sampling such as gibbs and getting posteriors as well as checking how well it mixes. Finally contains plotting functionality for plotting player value over time and posterior.
+A utils file containing abstractions for running and evaluating bayesian model on given positions as well as a bunch of helper functions such as loading data, winsorizing, one hot encoding, etc. Also contains steps for sampling such as gibbs and getting posteriors as well as checking how well it mixes. Finally contains plotting functionality for plotting player value over time and their posterior predictive distribution.
 
 ### `forward_bayesian_model.R`
 Utilizes the utils mentioned above together with a setup prior to run and evaluate the forward position data.
@@ -83,26 +84,25 @@ Utils file to abstract the performing of hyperparameter tuning for LSTM in noteb
 A notebook to display the data in an EDA kind of way, showing both what requesting information from Transfermarkt api and Understat api looks like.
 
 ### `player_stats.py`
-A data support file to load the correct data from the Understat API and create datasets for our LSTM. Creates a dataframe given a desired position (Defender, Midfielder, or Forward), creates  a torch dataset that uses the dataframe created for some player(s) to create input/output tensors that are passed to LSTM and merges with transfermarkt api data to create full dataset used.
+A data support file to load the correct data from the Understat API and create datasets for our LSTM. Creates a dataframe given a desired position (Defender, Midfielder, or Forward); creates a torch dataset that uses the dataframe created for some player(s) to create input/output tensors that are passed to the LSTM; and has another function to merge with transfermarkt api data to create a full dataset for the Bayesian model.
 
 ### `pull_understat_data.ipynb`
-Calling understat api given certain input such as leagues, positions, seasons, and stats which we then save to csv to avoid long api calls on every run.
+Calls understat api, given certain input such as leagues, positions, seasons, and stats which we then save to a csv. This avoids long api calls on every run.
 
 ### `transfer_performance_match.ipynb`
-Pulls the transfer value data and merges it, adds age and year column, and cleans it to save as csv for use in bayesian model.
+Pulls the transfer value data and merges it, adds age and year column, and cleans it to save as csv for use in the Bayesian model.
 
 ## app.py
 A streamlit application showing two pages: 
 1. An overview of the project.
-2. An interactive visualization used to show how we would use our bayesian part of project (which also builds on LSTM results). Idea is that you can either input custom inputs or from an existing player from the dataset and see the results of our bayesian to be able to assess the predicted transfer value. If chosen real player, you can tweak the stats using sliders to see, for example, if their expected goals were to increase, how does that change the predictions. 
+2. An interactive visualization used to show how we would use our bayesian part of project (which also builds on LSTM results). Idea is that you can either input custom inputs or use ones from an existing player from the dataset and see the results of our Bayesian model to be able to assess the predicted transfer value. If you choose a real player, you can tweak the stats using sliders to see, for example, if their expected goals were to increase, how that changes the predictions. 
 
 ## APIs
 
 ### Transfermarkt API
 
-Will be used in the future to collect data on transfer values of players in various leagues. These will
-be used as labels to predict transfer values.
+Collect data on transfer values of players in various leagues. These are used as labels to predict transfer values.
 
 ### Understat API
 
-Provides data on player performances on a game level, which we use to predict future performances. We will associate player performance with player transfer market value, so that we can use player performance predictions to predict player transfer market values.
+Provides data on player performances on a game level, which we use to predict future performances. We associate player performance, among other features with player transfer market values, so that we can use player performance predictions to predict player transfer market values.
