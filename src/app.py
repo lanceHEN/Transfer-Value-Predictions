@@ -154,7 +154,7 @@ def minmax_scale(train, test, cols):
     return train, test, col_mins, col_maxs
 
 # ── Gibbs sampler ──────────────────────────────────────────────────────────────
-def run_gibbs(X_train, y_train, prior_w, n_total=1220, burn=220, seed=42):
+def run_gibbs(X_train, y_train, prior_w, n_total=6098, burn=1098, seed=42):
     p = len(prior_w)
     pSinv = np.eye(p)
     pa, pb = 1.0, 1.0
@@ -190,7 +190,7 @@ def load_and_fit():
               'Serie_A','Ligue_1','La_Liga','EPL']
     Xf = np.hstack([f_tr[feat_f].values, np.ones((len(f_tr), 1))])
     yf = np.log(f_tr['value'].values)
-    pw_f = np.array([0.5, 0.5, 1.0, -3.0, 0.3, 0.0, -0.2, 0.7, 1.0, np.log(1e6)])
+    pw_f = np.array([1.5, 0.8, 0.4, -3.0, 0.3, 0.0, -0.2, 0.7, 1.0, np.log(1e6)])
     sw_f, ss_f = run_gibbs(Xf, yf, pw_f)
     f_thr = {k: float(np.percentile(f_tr['value'].values, p))
              for k, p in [('squad', 25), ('firstteam', 50), ('topflight', 75)]}
@@ -206,7 +206,7 @@ def load_and_fit():
               'Serie_A','Ligue_1','EPL','La_Liga']
     Xm = np.hstack([m_tr[feat_m].values, np.ones((len(m_tr), 1))])
     ym = np.log(m_tr['value'].values)
-    pw_m = np.array([0.2, 0.2, 2.0, 0.3, -3.0, 0.0, -0.2, 1.0, 0.7, np.log(1e6)])
+    pw_m = np.array([0.5, 0.5, 1.0, 0.3, -3.0, 0.0, -0.2, 1.0, 0.7, np.log(1e6)])
     sw_m, ss_m = run_gibbs(Xm, ym, pw_m)
     m_thr = {k: float(np.percentile(m_tr['value'].values, p))
              for k, p in [('squad', 25), ('firstteam', 50), ('topflight', 75)]}
@@ -354,8 +354,14 @@ def build_summary_text(position, median_val, lo_val, hi_val, mean_val):
             f"{unc}{snote}"
             f"</div>")
 
-PLOT_CFG = dict(plot_bgcolor="#fff", paper_bgcolor="#fff",
-                font=dict(family="IBM Plex Sans", size=12))
+def get_plot_cfg():
+    is_dark = st.get_option("theme.base") == "dark"
+    return dict(
+        plot_bgcolor="#1a1a1a" if is_dark else "#ffffff",
+        paper_bgcolor="#1a1a1a" if is_dark else "#ffffff",
+        font=dict(family="IBM Plex Sans", size=12,
+                  color="#f0f0f0" if is_dark else "#111111")
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -377,16 +383,19 @@ The transfer market in professional football is one of the most prized and compl
 all sports. Each year clubs spend billions combined purchasing players, yet the process of valuing
 them is largely driven by scouting opinions and market speculation rather than statistical analysis.
 Clubs routinely overpay for players whose performance fails to justify their price tag, and
-conversely overlook heavily undervalued talent.
+conversely overlook heavily undervalued talent. Beyond simply valuing players at the present
+moment, clubs also face the challenge of anticipating how a player's value will evolve over time,
+which depends on how their performance is likely to develop.
 
-Two related problems sit at the heart of player valuation:
-1. **Given how well a player is presently playing, what are they worth today?**
-2. **Given how well a player has done historically, how well will they perform in the future, and what will that be worth?**
+More formally, two related technical problems underlie these challenges. The first is a regression
+problem: given a player's current performance statistics alongside metadata such as age, league and
+year, can we reliably map those inputs to market value? The second is a forecasting problem: given
+a player's historical performance statistics, can we predict how those statistics will evolve at
+different points in the future? Each is valuable in isolation, but combining them yields a more
+powerful framework capable of forecasting a player's market value at multiple future points.
 
-This project builds a modular two-part framework to answer both. Crucially, unlike every existing
-model in the literature which returns only a point prediction, this framework produces a full
-**posterior predictive distribution** over market value, giving explicit uncertainty bounds for
-every estimate.
+This project builds a modular two-part framework to answer both.
+
         """)
         st.markdown("---")
         st.markdown('<div class="slabel">Data and Processing Pipeline</div>', unsafe_allow_html=True)
@@ -410,7 +419,7 @@ every estimate.
              "per 90 are used as performance inputs."),
             ("Step 5", "As-of merge with Transfermarkt valuations",
              "For each Transfermarkt valuation date, the most recent completed 10-game block prior "
-             "to that date is matched in. Player age (log-transformed), calendar year (to capture "
+             "to that date is matched in. Player age, calendar year (to capture "
              "transfer market inflation), and domestic league are appended as additional features."),
             ("Step 6", "80/20 player-based train and test split",
              "Players, not individual observations, are randomly assigned to train or test sets. "
@@ -431,25 +440,28 @@ as input, each a 3-vector of per-90 xG, xA, and xGChain, and predicts the next b
 Chaining predictions autoregressively allows multi-step forecasting. Trained separately for
 forwards and midfielders via an 80/20 player-based split, with hyperparameters found by grid
 search. Final config: learning rate 0.001, 1 hidden layer, width 32, 20 epochs. Test RMSE
-was 0.199 for forwards and 0.115 for midfielders. The higher forward error reflects
+was 0.224 for forwards and 0.123 for midfielders. The higher forward error likely reflects
 heterogeneity in the position: strikers and wingers have very different play styles, and
 the dataset does not provide granularity to separate them.
 
-A known limitation is that autoregressive predictions progressively collapse toward a player's
-historical average rather than tracking their actual trajectory. Small errors accumulate over
-steps, causing the model to settle on a stable estimate of typical performance rather than
-capturing short-term variation.
+A known limitation is that autoregressive predictions collapse toward a player's
+historical average rather than tracking their actual trajectory. This likely
+relates to data limitations. LSTMs often need longer input sequences to capture
+temporal patterns, but Understat does not provide enough data to produce enough
+larger input sequences. Also, more independent and informative player inputs (beyond
+those in the dataset) could be useful.
 
 **Part 2: Bayesian Linear Regression**
 
-Maps performance features (real or LSTM-generated) plus log(age), year, and one-hot league
+Maps performance features (real or LSTM-generated) plus age, year, and one-hot league
 encodings to log(market value) via Gibbs sampling with a Gaussian likelihood and informative
 priors. To improve performance on underrepresented elite players, we oversample them during
 training to increase representation. Observations with a market value exceeding 50M euros
 were resampled with replacement to 3 times their original count. After 18% burn-in, 5,000
 posterior samples are retained. Every valuation is a full posterior predictive distribution.
 The model achieves a posterior R2 of 0.49 for midfielders and 0.40 for forwards using real
-performance inputs, with RMSEs of 16.1M and 18.1M euros.
+performance inputs, with RMSEs of 16.1M and 18.1M euros when fed real data. For LSTM inputs
+it achieves a posterior R2 of 0.42 for midfielders and 0.34, with RMSEs of 22.5M and 24.3M euros
         """)
         st.markdown("---")
         st.markdown('<div class="slabel">Prior Weights and Posterior Results</div>', unsafe_allow_html=True)
@@ -472,12 +484,12 @@ higher than Bundesliga, which was the reference category, contrary to our prior 
         st.markdown("---")
         st.markdown('<div class="slabel">Prior vs Posterior Weights</div>', unsafe_allow_html=True)
         st.dataframe(pd.DataFrame({
-            "Feature":        ["xG / 90","xA / 90","xGChain / 90","Age (log)","Year",
+            "Feature":        ["xG / 90","xA / 90","xGChain / 90","Age","Year",
                                "Premier League","La Liga","Ligue 1","Serie A","Intercept"],
-            "FW Prior":       ["+0.5","+0.5","+1.0","-3.0","+0.3","+1.0","+0.7","-0.2","0.0","~13.8"],
+            "FW Prior":       ["+1.5","+0.8","+0.4","-3.0","+0.3","+1.0","+0.7","-0.2","0.0","~13.8"],
             "FW Posterior": ["+0.593", "+0.814", "+0.944", "-3.443", "+0.524",
                  "+1.499", "+0.758", "+0.524", "+0.595", "~14.9"],
-            "MF Prior":       ["+0.2","+0.2","+2.0","-3.0","+0.3","+1.0","+0.7","-0.2","0.0","~13.8"],
+            "MF Prior":       ["+0.5","+0.5","+1.0","-3.0","+0.3","+1.0","+0.7","-0.2","0.0","~13.8"],
             "MF Posterior": ["+0.036", "+0.158", "+2.198", "-3.902", "+0.389",
                             "+1.428", "+0.663", "+0.389", "+0.508", "~14.9"],
         }), width='content', hide_index=True, height=388)
@@ -673,7 +685,7 @@ else:
         st.markdown("### Posterior Predictive Distribution")
         st.markdown(
             "<span style='font-size:0.84rem;color:#555'>"
-            "Each bar shows how many of the 1,000 Gibbs posterior samples landed in that "
+            "Each bar shows how many of the 5,000 Gibbs posterior samples landed in that "
             "value range. The x-axis is fixed to the full range of training market values, "
             "so the distribution visibly shifts left or right as you change inputs. "
             "Green bars fall within the 90% credible interval."
@@ -697,18 +709,33 @@ else:
             x=edges[:-1]/1e6, y=np.where(ci_msk, counts, 0), width=bw,
             marker_color="rgba(0,200,150,0.75)", name="90% Credible Interval"
         ))
-        fig.add_vline(x=mean_v/1e6, line_color="#0a0a0a", line_dash="dash", line_width=2,
+        is_dark = (st.get_option("theme.base") or "light") == "dark"
+        line_color = "#f0f0f0" if is_dark else "#0a0a0a"
+        fig.add_vline(x=mean_v/1e6, line_color=line_color, line_dash="dash", line_width=2,
                       annotation_text=f"Mean €{mean_v/1e6:.1f}M",
-                      annotation_position="top right", annotation_font_size=11)
+                      annotation_position="top right", annotation_font_size=11, annotation_font_color=line_color)
         fig.add_vline(x=med_v/1e6, line_color="#e63946", line_dash="dot", line_width=2,
                       annotation_text=f"Median €{med_v/1e6:.1f}M",
-                      annotation_position="top left", annotation_font_size=11)
+                      annotation_position="top left", annotation_font_size=11, annotation_font_color="#e63946")
+        
+        text_color = "#f0f0f0" if is_dark else "#111111"
+        grid_color = "#444444" if is_dark else "#eeeeee"
+
         fig.update_layout(
-            **PLOT_CFG,
-            xaxis=dict(title="Market Value (€ millions)",
-                       range=[x_min/1e6, x_max/1e6],
-                       gridcolor="#eee"),
-            yaxis=dict(title="Posterior samples", gridcolor="#eee"),
+            **get_plot_cfg(),
+            xaxis=dict(
+                title="Market Value (€ millions)",
+                title_font=dict(color=text_color),
+                tickfont=dict(color=text_color),
+                range=[x_min/1e6, x_max/1e6],
+                gridcolor=grid_color,
+            ),
+            yaxis=dict(
+                title="Samples",
+                title_font=dict(color=text_color),
+                tickfont=dict(color=text_color),
+                gridcolor=grid_color,
+            ),
             barmode="overlay",
             height=380, margin=dict(t=20, b=50),
         )
