@@ -625,7 +625,7 @@ else:
         st.markdown(
             "<span style='font-size:0.84rem;color:#555'>"
             "Each bar shows how many of the 5,000 Gibbs posterior samples landed in that "
-            "value range. The x-axis is fixed to the full range of training market values, "
+            "value range. The x-axis adjusts to the range of the current valuation, "
             "so the distribution visibly shifts left or right as you change inputs. "
             "Green bars fall within the 90% credible interval."
             "</span>", unsafe_allow_html=True
