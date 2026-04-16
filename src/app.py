@@ -134,7 +134,7 @@ LEAGUES_UI = ["EPL", "La Liga", "Bundesliga", "Serie A", "Ligue 1"]
 def winsorize(train, test, cols):
     caps = {}
     for col in cols:
-        cap = train[col].quantile(0.99)
+        cap = train[col].quantile(0.95)
         train[col] = train[col].clip(upper=cap)
         test[col]  = test[col].clip(upper=cap)
         caps[col]  = cap
@@ -276,8 +276,8 @@ def build_x_row(position, xg, xa, xgc, age, year, league):
         return float(np.clip((min(v, caps[col]) - cmin[col]) /
                              (cmax[col] - cmin[col] + 1e-12), 0, 1))
 
-    al = float(np.clip((np.log(max(age, 1)) - cmin['age_log']) /
-                       (cmax['age_log'] - cmin['age_log'] + 1e-12), 0, 1))
+    al = float(np.clip((np.log(age) - cmin['age_log']) /
+               (cmax['age_log'] - cmin['age_log'] + 1e-12), 0, 1))
     yr = float(np.clip((year - cmin['year']) /
                        (cmax['year'] - cmin['year'] + 1e-12), 0, 1))
 
@@ -664,10 +664,10 @@ else:
         vd  = np.exp(ld)
         pos = r['position']
 
-        mean_v = np.exp(np.mean(ld))
-        med_v  = np.exp(np.median(ld))
-        lo_v   = np.exp(np.quantile(ld, 0.05))
-        hi_v   = np.exp(np.quantile(ld, 0.95))
+        mean_v = np.mean(vd)
+        med_v  = np.median(vd)
+        lo_v   = np.quantile(vd, 0.05)
+        hi_v   = np.quantile(vd, 0.95)
 
         st.markdown("---")
         if r['player_name']:
